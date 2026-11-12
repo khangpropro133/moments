@@ -2,12 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import LetterGlitch from './components/LetterGlitch';
 import Composer from './components/Composer';
 import MomentCard from './components/MomentCard';
+import Avatar from './components/Avatar';
+import ProfileModal from './components/ProfileModal';
 import {
+  addComment,
   createMoment,
+  deleteComment,
   deletePost,
-  getAllPosts,
+  getFeedBundle,
   subscribeToMoments,
-  togglePostLike,
+  togglePostReaction,
 } from './db';
 
 function Lightbox({ image, onClose }) {
@@ -61,16 +65,23 @@ const FILTERS = [
 
 export default function App() {
   const [posts, setPosts] = useState([]);
+  const [myProfile, setMyProfile] = useState({
+    visitorHash: '',
+    displayName: '',
+    avatarUrl: '',
+  });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [filter, setFilter] = useState('all');
   const [asciiPaused, setAsciiPaused] = useState(false);
   const [activeImage, setActiveImage] = useState(null);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const refreshFeed = useCallback(async () => {
     try {
-      const loaded = await getAllPosts();
-      setPosts(loaded);
+      const bundle = await getFeedBundle();
+      setPosts(bundle.posts);
+      setMyProfile(bundle.myProfile);
       setLoadError('');
     } catch (err) {
       console.error('Failed to load moments:', err);
@@ -91,7 +102,13 @@ export default function App() {
   }, [refreshFeed]);
 
   async function handlePublish(draft) {
-    const created = await createMoment(draft);
+    const created = await createMoment({
+      ...draft,
+      currentAvatarUrl: myProfile.avatarUrl,
+    });
+    if (draft.author && draft.author !== 'anonymous') {
+      setMyProfile((prev) => ({ ...prev, displayName: draft.author }));
+    }
     setPosts((prev) => {
       if (prev.some((p) => p.id === created.id)) return prev;
       return [created, ...prev];
@@ -101,28 +118,77 @@ export default function App() {
     }
   }
 
-  async function handleToggleLike(id) {
-    const target = posts.find((p) => p.id === id);
+  async function handleToggleReaction(postId, emoji) {
+    const target = posts.find((p) => p.id === postId);
     if (!target) return;
 
-    const nextLiked = !target.liked;
-    const optimistic = {
-      ...target,
-      liked: nextLiked,
-      likes: Math.max(0, (target.likes || 0) + (nextLiked ? 1 : -1)),
-    };
+    const currentEntry = (target.reactions || []).find(
+      (r) => r.emoji === emoji
+    );
+    const shouldReact = !currentEntry?.reacted;
 
-    setPosts((prev) => prev.map((p) => (p.id === id ? optimistic : p)));
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id !== postId) return p;
+        return {
+          ...p,
+          reactions: (p.reactions || []).map((r) =>
+            r.emoji === emoji
+              ? {
+                  ...r,
+                  reacted: shouldReact,
+                  count: Math.max(0, r.count + (shouldReact ? 1 : -1)),
+                }
+              : r
+          ),
+        };
+      })
+    );
 
     try {
-      await togglePostLike(id, nextLiked);
+      await togglePostReaction(postId, emoji, shouldReact);
     } catch (err) {
-      console.error('Failed to update like:', err);
+      console.error('Failed to toggle reaction:', err);
       refreshFeed();
     }
   }
 
-  async function handleDelete(id) {
+  async function handleAddComment({ postId, author, content }) {
+    const created = await addComment({
+      postId,
+      author,
+      content,
+      currentAvatarUrl: myProfile.avatarUrl,
+    });
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id !== postId) return p;
+        if (p.comments.some((c) => c.id === created.id)) return p;
+        return {
+          ...p,
+          comments: [...p.comments, created],
+        };
+      })
+    );
+  }
+
+  async function handleDeleteComment(postId, commentId) {
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? { ...p, comments: p.comments.filter((c) => c.id !== commentId) }
+          : p
+      )
+    );
+    try {
+      await deleteComment(commentId);
+    } catch (err) {
+      console.error('Failed to delete comment:', err);
+      refreshFeed();
+    }
+  }
+
+  async function handleDeletePost(id) {
     const previous = posts;
     setPosts((prev) => prev.filter((p) => p.id !== id));
     try {
@@ -131,6 +197,11 @@ export default function App() {
       console.error('Failed to delete post:', err);
       setPosts(previous);
     }
+  }
+
+  function handleProfileSaved(saved) {
+    setMyProfile(saved);
+    refreshFeed();
   }
 
   const filteredPosts = useMemo(() => {
@@ -166,19 +237,44 @@ export default function App() {
             </p>
           </div>
 
-          <button
-            type="button"
-            className="ascii-toggle"
-            onClick={() => setAsciiPaused((p) => !p)}
-            title="Toggle background ASCII animation"
-          >
-            ascii: {asciiPaused ? 'paused' : 'on'}
-          </button>
+          <div className="header-controls">
+            <button
+              type="button"
+              className="profile-trigger-btn"
+              onClick={() => setProfileOpen(true)}
+              title="Edit your avatar & @name"
+            >
+              <Avatar
+                name={myProfile.displayName || 'you'}
+                avatarUrl={myProfile.avatarUrl}
+                hash={myProfile.visitorHash}
+                size={20}
+              />
+              <span>
+                {myProfile.displayName
+                  ? `@${myProfile.displayName}`
+                  : 'profile'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className="ascii-toggle"
+              onClick={() => setAsciiPaused((p) => !p)}
+              title="Toggle background ASCII animation"
+            >
+              ascii: {asciiPaused ? 'paused' : 'on'}
+            </button>
+          </div>
         </header>
 
         <main className="main-feed">
           <section aria-label="Create a post">
-            <Composer onPublish={handlePublish} />
+            <Composer
+              profile={myProfile}
+              onOpenProfile={() => setProfileOpen(true)}
+              onPublish={handlePublish}
+            />
           </section>
 
           <nav className="filter-bar" aria-label="Filter moments">
@@ -216,9 +312,13 @@ export default function App() {
                 <MomentCard
                   key={post.id}
                   post={post}
-                  onToggleLike={handleToggleLike}
-                  onDelete={handleDelete}
+                  myProfile={myProfile}
+                  onToggleReaction={handleToggleReaction}
+                  onAddComment={handleAddComment}
+                  onDeleteComment={handleDeleteComment}
+                  onDelete={handleDeletePost}
                   onOpenImage={setActiveImage}
+                  onOpenProfile={() => setProfileOpen(true)}
                 />
               ))
             )}
@@ -226,9 +326,17 @@ export default function App() {
         </main>
 
         <footer className="site-footer">
-          <span>live shared feed · moments</span>
+          <span>live shared feed · moments v0.2</span>
         </footer>
       </div>
+
+      <ProfileModal
+        open={profileOpen}
+        profile={myProfile}
+        onClose={() => setProfileOpen(false)}
+        onProfileSaved={handleProfileSaved}
+        onTokenSynced={refreshFeed}
+      />
 
       <Lightbox image={activeImage} onClose={() => setActiveImage(null)} />
     </div>

@@ -17,12 +17,26 @@ export function getVisitorToken() {
   return token;
 }
 
+let cachedToken = null;
 let cachedTokenHashPromise = null;
 
+export function setVisitorToken(rawToken) {
+  const clean = (rawToken || '').trim().toLowerCase();
+  if (!/^[a-f0-9]{32,128}$/.test(clean)) {
+    throw new Error(
+      'Sync code must be a valid 64-character hex code copied from another device.'
+    );
+  }
+  localStorage.setItem(VISITOR_TOKEN_KEY, clean);
+  cachedToken = null;
+  cachedTokenHashPromise = null;
+}
+
 export function getVisitorTokenHash() {
-  if (!cachedTokenHashPromise) {
-    const token = getVisitorToken();
-    const encoded = new TextEncoder().encode(token);
+  const current = getVisitorToken();
+  if (!cachedTokenHashPromise || cachedToken !== current) {
+    cachedToken = current;
+    const encoded = new TextEncoder().encode(current);
     cachedTokenHashPromise = crypto.subtle
       .digest('SHA-256', encoded)
       .then((buf) => bytesToHex(new Uint8Array(buf)));
@@ -46,8 +60,10 @@ export const supabase = isSupabaseConfigured
         autoRefreshToken: false,
       },
       global: {
-        headers: {
-          'x-visitor-token': getVisitorToken(),
+        fetch: (url, options = {}) => {
+          const headers = new Headers(options.headers || {});
+          headers.set('x-visitor-token', getVisitorToken());
+          return fetch(url, { ...options, headers });
         },
       },
     })

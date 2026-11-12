@@ -547,7 +547,7 @@ export default function LetterGlitch({
     function handleWindowClick(e) {
       if (paused || reducedMotionQuery.matches || !meteorsEnabled) return;
       const interactiveEl = e.target.closest?.(
-        'button, input, textarea, a, video, label, .composer-card, .moment-card, .lightbox-backdrop'
+        'button, input, textarea, a, video, label, .composer-card, .moment-card, .lightbox-backdrop, .modal-backdrop'
       );
       if (interactiveEl) return;
       spawnMeteor(performance.now(), {

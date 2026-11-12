@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-
-const AUTHOR_STORAGE_KEY = 'moments_author_name';
+import Avatar from './Avatar';
+import { AUTHOR_STORAGE_KEY } from '../db';
 
 function PreviewAttachment({ item, onRemove }) {
   const [url, setUrl] = useState('');
@@ -34,9 +34,10 @@ function PreviewAttachment({ item, onRemove }) {
   );
 }
 
-export default function Composer({ onPublish }) {
+export default function Composer({ profile, onOpenProfile, onPublish }) {
   const [author, setAuthor] = useState(
-    () => localStorage.getItem(AUTHOR_STORAGE_KEY) || ''
+    () =>
+      profile?.displayName || localStorage.getItem(AUTHOR_STORAGE_KEY) || ''
   );
   const [showTitle, setShowTitle] = useState(false);
   const [title, setTitle] = useState('');
@@ -47,6 +48,12 @@ export default function Composer({ onPublish }) {
   const [error, setError] = useState('');
 
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (profile?.displayName) {
+      setAuthor(profile.displayName);
+    }
+  }, [profile?.displayName]);
 
   function addFiles(fileList) {
     setError('');
@@ -144,17 +151,33 @@ export default function Composer({ onPublish }) {
       onDrop={handleDrop}
     >
       <div className="composer-top">
-        <label className="author-input-wrap">
-          <span className="mono-prefix">@</span>
-          <input
-            type="text"
-            className="author-input"
-            placeholder="your-name"
-            maxLength={28}
-            value={author}
-            onChange={(e) => setAuthor(e.target.value)}
-          />
-        </label>
+        <div className="composer-identity">
+          <button
+            type="button"
+            className="composer-avatar-btn"
+            onClick={onOpenProfile}
+            title="Set your avatar & profile"
+          >
+            <Avatar
+              name={author || 'you'}
+              avatarUrl={profile?.avatarUrl}
+              hash={profile?.visitorHash}
+              size={26}
+            />
+          </button>
+
+          <label className="author-input-wrap">
+            <span className="mono-prefix">@</span>
+            <input
+              type="text"
+              className="author-input"
+              placeholder="your-name"
+              maxLength={28}
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+            />
+          </label>
+        </div>
 
         <button
           type="button"

@@ -2,17 +2,20 @@
 
 A calm, black-themed daily-life sharing website built with **React + Vite** and **Supabase** (Postgres + Storage + Realtime).
 
-People with the link can post short notes, longer blog thoughts, photos, and videos—all synced live across browsers and devices.
+People with the link can post short notes, longer blog thoughts, photos, and videos, react with emojis, and reply inline—all synced live across browsers and devices without a login wall.
 
 ## Features
 
 - **Drifting ASCII Sky + Shooting Meteors** (`src/components/LetterGlitch.jsx`): Pure `#000000` background with parallax drifting ASCII layers, ambient wave currents, cursor ripples, and shooting ASCII meteors.
-- **Simple Moment & Blog Composer** (`src/components/Composer.jsx`): Enter an `@name`, optionally add a blog title, write text, and attach or drag-and-drop photos and videos (up to 50 MB).
-- **Live Shared Feed** (`src/db.js`, `src/supabase.js`):
-  - Posts and shared likes stored in **Supabase Postgres** (`public.posts` & `public.post_likes`) with Row Level Security.
-  - Photos and videos uploaded to **Supabase Storage** (`moments-media` public bucket).
+- **Zero-Login Profiles & Avatars** (`src/components/ProfileModal.jsx`, `src/components/Avatar.jsx`): Choose an `@name`, upload an avatar (auto-cropped client-side to `256×256`), or fall back to a deterministic ASCII badge. Includes a copy/paste **device sync code** (`x-visitor-token`) to carry the same profile and post ownership between laptop and phone.
+- **Simple Moment & Blog Composer** (`src/components/Composer.jsx`): Optional blog title, freeform text, and multi-file photo/video uploads or drag-and-drop (up to 50 MB per file).
+- **Curated Emoji Reactions & Inline Flat Replies** (`src/components/MomentCard.jsx`):
+  - React to moments with `♥`, `😂`, `🔥`, `🫂`, `👀`, or `✦`.
+  - Compact inline preview of the latest 2 replies on each card, expandable to the full chronological thread and reply input.
+- **Live Shared Feed with Ownership RLS** (`src/db.js`, `src/supabase.js`):
+  - Backed by **Supabase Postgres** (`public.posts`, `public.profiles`, `public.post_comments`, `public.post_reactions`) and **Supabase Storage** (`moments-media`).
   - Live updates via **Supabase Realtime**.
-  - Ownership-protected deletion & unliking via SHA-256 visitor tokens (`x-visitor-token`)—no login screen needed, while preventing anyone else from deleting your posts.
+  - SHA-256 visitor-token Row Level Security (`x-visitor-token`) ensures only owners can update their profile, toggle their own reactions, or delete their posts/comments.
 
 ## Environment Variables
 
