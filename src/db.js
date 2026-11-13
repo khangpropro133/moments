@@ -285,43 +285,76 @@ function hydrateFeed({
   return { posts, myProfile };
 }
 
+async function fetchAllRows(buildQuery, pageSize = 1000, maxRows = 5000) {
+  const all = [];
+  let from = 0;
+
+  while (from < maxRows) {
+    const to = from + pageSize - 1;
+    const { data, error } = await buildQuery().range(from, to);
+    if (error) throw new Error(error.message);
+    const batch = data || [];
+    all.push(...batch);
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return all;
+}
+
 export async function getFeedBundle() {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase environment variables are not configured.');
   }
 
-  const [myHash, postsRes, profilesRes, commentsRes, reactionsRes] =
+  const [myHash, rawPosts, rawProfiles, rawComments, rawReactions] =
     await Promise.all([
       getVisitorTokenHash(),
-      supabase
-        .from('posts')
-        .select(
-          'id, author, title, content, media, author_token_hash, created_at'
-        )
-        .order('created_at', { ascending: false })
-        .limit(100),
-      supabase
-        .from('profiles')
-        .select('visitor_hash, display_name, avatar_url'),
-      supabase
-        .from('post_comments')
-        .select('id, post_id, author, content, author_token_hash, created_at')
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('post_reactions')
-        .select('post_id, visitor_hash, reaction'),
+      fetchAllRows(
+        () =>
+          supabase
+            .from('posts')
+            .select(
+              'id, author, title, content, media, author_token_hash, created_at'
+            )
+            .order('created_at', { ascending: false }),
+        500,
+        1000
+      ),
+      fetchAllRows(
+        () =>
+          supabase
+            .from('profiles')
+            .select('visitor_hash, display_name, avatar_url'),
+        1000,
+        3000
+      ),
+      fetchAllRows(
+        () =>
+          supabase
+            .from('post_comments')
+            .select(
+              'id, post_id, author, content, author_token_hash, created_at'
+            )
+            .order('created_at', { ascending: true }),
+        1000,
+        5000
+      ),
+      fetchAllRows(
+        () =>
+          supabase
+            .from('post_reactions')
+            .select('post_id, visitor_hash, reaction'),
+        1000,
+        10000
+      ),
     ]);
 
-  if (postsRes.error) throw new Error(postsRes.error.message);
-  if (profilesRes.error) throw new Error(profilesRes.error.message);
-  if (commentsRes.error) throw new Error(commentsRes.error.message);
-  if (reactionsRes.error) throw new Error(reactionsRes.error.message);
-
   return hydrateFeed({
-    rawPosts: postsRes.data,
-    rawProfiles: profilesRes.data,
-    rawComments: commentsRes.data,
-    rawReactions: reactionsRes.data,
+    rawPosts,
+    rawProfiles,
+    rawComments,
+    rawReactions,
     myHash,
   });
 }

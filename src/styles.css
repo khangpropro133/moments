@@ -419,6 +419,9 @@ textarea {
 }
 
 .filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -429,6 +432,15 @@ textarea {
   cursor: pointer;
   white-space: nowrap;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.filter-count {
+  font-size: 0.68rem;
+  color: #555555;
+}
+
+.filter-pill.is-active .filter-count {
+  color: var(--text-secondary);
 }
 
 .filter-pill:hover {
@@ -1055,6 +1067,29 @@ textarea {
 }
 
 /* Empty & Footer */
+.load-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 4px;
+}
+
+.load-more-btn {
+  background: rgba(11, 11, 11, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.load-more-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
 .empty-state {
   text-align: center;
   padding: 42px 16px;

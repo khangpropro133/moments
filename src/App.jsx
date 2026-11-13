@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LetterGlitch from './components/LetterGlitch';
 import Composer from './components/Composer';
 import MomentCard from './components/MomentCard';
@@ -56,12 +56,30 @@ function Lightbox({ image, onClose }) {
   );
 }
 
+const PAGE_SIZE = 25;
+
 const FILTERS = [
   { id: 'all', label: 'all' },
   { id: 'blog', label: 'blog / notes' },
   { id: 'photos', label: 'photos' },
   { id: 'videos', label: 'videos' },
 ];
+
+function matchesFilter(post, filterId) {
+  const media = post.media || [];
+  if (filterId === 'photos') {
+    return media.some((m) => m.kind === 'image');
+  }
+  if (filterId === 'videos') {
+    return media.some((m) => m.kind === 'video');
+  }
+  if (filterId === 'blog') {
+    return (
+      Boolean(post.title) || (media.length === 0 && Boolean(post.content))
+    );
+  }
+  return true;
+}
 
 export default function App() {
   const [posts, setPosts] = useState([]);
@@ -73,9 +91,12 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [filter, setFilter] = useState('all');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [asciiPaused, setAsciiPaused] = useState(false);
   const [activeImage, setActiveImage] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
+
+  const loadMoreRef = useRef(null);
 
   const refreshFeed = useCallback(async () => {
     try {
@@ -204,23 +225,46 @@ export default function App() {
     refreshFeed();
   }
 
+  const filterCounts = useMemo(() => {
+    const counts = { all: posts.length, blog: 0, photos: 0, videos: 0 };
+    for (const post of posts) {
+      if (matchesFilter(post, 'blog')) counts.blog += 1;
+      if (matchesFilter(post, 'photos')) counts.photos += 1;
+      if (matchesFilter(post, 'videos')) counts.videos += 1;
+    }
+    return counts;
+  }, [posts]);
+
   const filteredPosts = useMemo(() => {
-    return posts.filter((post) => {
-      const media = post.media || [];
-      if (filter === 'photos') {
-        return media.some((m) => m.kind === 'image');
-      }
-      if (filter === 'videos') {
-        return media.some((m) => m.kind === 'video');
-      }
-      if (filter === 'blog') {
-        return (
-          Boolean(post.title) || (media.length === 0 && Boolean(post.content))
-        );
-      }
-      return true;
-    });
+    return posts.filter((post) => matchesFilter(post, filter));
   }, [posts, filter]);
+
+  const displayedPosts = useMemo(() => {
+    return filteredPosts.slice(0, visibleCount);
+  }, [filteredPosts, visibleCount]);
+
+  const hasMore = visibleCount < filteredPosts.length;
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [filter]);
+
+  useEffect(() => {
+    if (!hasMore) return undefined;
+    const node = loadMoreRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((prev) => prev + PAGE_SIZE);
+        }
+      },
+      { rootMargin: '420px' }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, filteredPosts.length]);
 
   return (
     <div className="page-root">
@@ -287,7 +331,10 @@ export default function App() {
                 }`}
                 onClick={() => setFilter(item.id)}
               >
-                {item.label}
+                <span>{item.label}</span>
+                {!loading && filterCounts[item.id] > 0 && (
+                  <span className="filter-count">{filterCounts[item.id]}</span>
+                )}
               </button>
             ))}
           </nav>
@@ -308,19 +355,36 @@ export default function App() {
                 </span>
               </div>
             ) : (
-              filteredPosts.map((post) => (
-                <MomentCard
-                  key={post.id}
-                  post={post}
-                  myProfile={myProfile}
-                  onToggleReaction={handleToggleReaction}
-                  onAddComment={handleAddComment}
-                  onDeleteComment={handleDeleteComment}
-                  onDelete={handleDeletePost}
-                  onOpenImage={setActiveImage}
-                  onOpenProfile={() => setProfileOpen(true)}
-                />
-              ))
+              <>
+                {displayedPosts.map((post) => (
+                  <MomentCard
+                    key={post.id}
+                    post={post}
+                    myProfile={myProfile}
+                    onToggleReaction={handleToggleReaction}
+                    onAddComment={handleAddComment}
+                    onDeleteComment={handleDeleteComment}
+                    onDelete={handleDeletePost}
+                    onOpenImage={setActiveImage}
+                    onOpenProfile={() => setProfileOpen(true)}
+                  />
+                ))}
+
+                {hasMore && (
+                  <div ref={loadMoreRef} className="load-more-wrap">
+                    <button
+                      type="button"
+                      className="load-more-btn"
+                      onClick={() =>
+                        setVisibleCount((prev) => prev + PAGE_SIZE)
+                      }
+                    >
+                      load more moments ({displayedPosts.length} /{' '}
+                      {filteredPosts.length})
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </section>
         </main>
